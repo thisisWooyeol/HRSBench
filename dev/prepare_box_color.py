@@ -235,6 +235,9 @@ def merge_color_pickle_files_to_jsonl(pickle_files: list[str], csv_file: str, ou
                 'color3': csv_data['color3'],
                 'color4': csv_data['color4']
             })
+
+            level = 1 + int(len(csv_data['obj3']) > 1) + int(len(csv_data['obj4']) > 1)
+            entry['level'] = level
             
             merged_data.append(entry)
         
@@ -272,10 +275,10 @@ def merge_color_pickle_files_to_jsonl(pickle_files: list[str], csv_file: str, ou
 if __name__ == "__main__":
     # Define file paths
     pickle_files = [
-        "gpt_generated_box/color.p"
+        "legacy/gpt_generated_box/color.p"
     ]
     
-    csv_file = "hrs_prompts/colors_composition_prompts.csv"
+    csv_file = "legacy/hrs_prompts/colors_composition_prompts.csv"
     output_file = "hrs_dataset/color.jsonl"
     
     merge_color_pickle_files_to_jsonl(pickle_files, csv_file, output_file)

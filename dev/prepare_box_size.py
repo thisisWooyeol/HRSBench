@@ -220,6 +220,9 @@ def merge_size_pickle_files_to_jsonl(pickle_files: list[str], csv_file: str, out
                 'relation1': csv_data['rel1'],
                 'relation2': csv_data['rel2']
             })
+
+            level = 1 + int(len(csv_data['obj3']) > 1) + int(len(csv_data['obj4']) > 1)
+            entry['level'] = level
             
             merged_data.append(entry)
         
@@ -257,10 +260,10 @@ def merge_size_pickle_files_to_jsonl(pickle_files: list[str], csv_file: str, out
 if __name__ == "__main__":
     # Define file paths
     pickle_files = [
-        "gpt_generated_box/size.p"
+        "legacy/gpt_generated_box/size.p"
     ]
     
-    csv_file = "hrs_prompts/size_compositions_prompts.csv"
+    csv_file = "legacy/hrs_prompts/size_compositions_prompts.csv"
     output_file = "hrs_dataset/size.jsonl"
     
     merge_size_pickle_files_to_jsonl(pickle_files, csv_file, output_file)

@@ -198,6 +198,9 @@ def merge_spatial_pickle_files_to_jsonl(pickle_files: list[str], csv_file: str, 
                 'relation1': csv_data['rel1'],
                 'relation2': csv_data['rel2']
             })
+
+            level = 1 + int(len(csv_data['obj3']) > 1) + int(len(csv_data['obj4']) > 1)
+            entry['level'] = level
             
             merged_data.append(entry)
         
@@ -235,11 +238,11 @@ def merge_spatial_pickle_files_to_jsonl(pickle_files: list[str], csv_file: str, 
 if __name__ == "__main__":
     # Define file paths
     pickle_files = [
-        "gpt_generated_box/spatial.p",
-        "gpt_generated_box/spatial_2.p"
+        "legacy/gpt_generated_box/spatial.p",
+        "legacy/gpt_generated_box/spatial_2.p"
     ]
     
-    csv_file = "hrs_prompts/spatial_compositions_prompts.csv"
+    csv_file = "legacy/hrs_prompts/spatial_compositions_prompts.csv"
     output_file = "hrs_dataset/spatial.jsonl"
     
     merge_spatial_pickle_files_to_jsonl(pickle_files, csv_file, output_file)

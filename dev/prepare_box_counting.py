@@ -206,28 +206,38 @@ def merge_pickle_files_to_jsonl(pickle_files: list[str], csv_file: str, output_f
             normalized_bbox_list = []
             for bbox in bbox_list:
                 normalized_bbox = [coord / 512.0 for coord in bbox]
-                normalized_bbox_list.append(normalized_bbox)
+                normalized_bbox_list.append(normalized_bbox)            
             
-            entry = {
-                'prompt': prompt,
-                'phrases': objects_list,
-                'bounding_boxes': normalized_bbox_list,
-                'num_objects': len(objects_list),
-                'num_bboxes': len(bbox_list)
-            }
-            
-            # Add CSV data if available
+
             if prompt in prompts_data:
                 csv_data = prompts_data[prompt]
-                entry.update({
+
+                # Determine level based on n1, n2
+                if csv_data['n1'] == 0 or csv_data['n2'] == 0:
+                    level = 1
+                elif (csv_data['n1'] > 0 and csv_data['n1'] < 4) and (csv_data['n2'] > 0 and csv_data['n2'] < 4):
+                    level = 2
+                elif (csv_data['n1'] >= 4 and csv_data['n2'] >= 4):
+                    level = 3
+                else: 
+                    warnings['general'].append(f"Uncategorized level for n1={csv_data['n1']}, n2={csv_data['n2']}")
+                    continue
+
+                entry = {
+                    'prompt': prompt,
+                    'phrases': objects_list,
+                    'bounding_boxes': normalized_bbox_list,
+                    'num_objects': len(objects_list),
+                    'num_bboxes': len(bbox_list),
                     'vanilla_prompt': csv_data['vanilla_prompt'],
                     'expected_n1': csv_data['n1'],
                     'expected_obj1': csv_data['obj1'],
                     'expected_n2': csv_data['n2'],
-                    'expected_obj2': csv_data['obj2']
-                })
+                    'expected_obj2': csv_data['obj2'],
+                    'level': level
+                }
             
-            merged_data.append(entry)
+                merged_data.append(entry)
         
         total_file_warnings = sum(file_warnings.values())
         print(f"Processed {pickle_file}: {total_file_warnings} warnings found, {skipped_duplicates} duplicates skipped")
@@ -268,13 +278,13 @@ def merge_pickle_files_to_jsonl(pickle_files: list[str], csv_file: str, output_f
 if __name__ == "__main__":
     # Define file paths
     pickle_files = [
-        "gpt_generated_box/counting_0_499.p",
-        "gpt_generated_box/counting_500_1499.p", 
-        "gpt_generated_box/counting_1500_2499.p",
-        "gpt_generated_box/counting_2500_2999.p"
+        "legacy/gpt_generated_box/counting_0_499.p",
+        "legacy/gpt_generated_box/counting_500_1499.p", 
+        "legacy/gpt_generated_box/counting_1500_2499.p",
+        "legacy/gpt_generated_box/counting_2500_2999.p"
     ]
     
-    csv_file = "hrs_prompts/counting_prompts.csv"
+    csv_file = "legacy/hrs_prompts/counting_prompts.csv"
     output_file = "hrs_dataset/counting.jsonl"
     
     merge_pickle_files_to_jsonl(pickle_files, csv_file, output_file)
