@@ -1,0 +1,12 @@
+{
+    "editor.codeActionsOnSave": {
+        "source.fixAll": "never"
+    },
+    "editor.formatOnSave": false,
+    "[python]": {
+        "editor.codeActionsOnSave": {
+            "source.organizeImports.ruff": "never"
+        },
+        "editor.formatOnType": false,
+    }
+}
