@@ -18,6 +18,17 @@ For box layout-to-image tasks, GPT4 generated layouts which are provided by `Att
 
 ---
 
-# How to Use
+# About HRS dataset
 
 The core functionality of HRS-Bench are included in `src` directory, majorly copied from [Attention-Refocusing](https://github.com/Attention-Refocusing/attention-refocusing).
+
+With the HRS prompts and GPT-4 generated box layouts from Attention-Refocusing, I pre-processed the complete dataset into `hrs_dataset` in `jsonl` format. 
+
+The dataset includes four main categories: spatial relationship, color, size, and counting. Even though HRS prompts for each category counting/spatial/size/color are 3, 000/1,002/501/501, there are some duplicated prompts. If we count only unique prompts, the numbers are 2,990/898/424/484.
+
+And there are also mysteriously missing prompts in `*.p` pickle files, last lines for all datasets. Therefore, 2,990/896/423/483 unique prompts can be evaluated.
+
+
+# How to use
+
+## Step-1: Generate Images with HRS prompts (and optionally with box layouts)
