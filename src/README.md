@@ -10,17 +10,25 @@ Run the
 to generate the bounding boxes and save them as follows:
 ```bash
 python src/detection/UniDet-master/demo.py \
-    --input "/path/to/image_dir/*" \
+    --input "/mnt/nas5/AIBL-Research/shjo/250809_ISAC/output/GLIGEN/counting_seed42/*" \
+    --output_base_dir "./output/GLIGEN" \
+    --task "counting" \
+    --pkl_pth "./output/GLIGEN/counting.pkl" \
+    --opts MODEL.WEIGHTS "Partitioned_COI_RS101_2x.pth"
+
+python src/detection/UniDet-master/demo.py \
+    --input "/mnt/nas5/AIBL-Research/shjo/250809_ISAC/output/GLIGEN/spatial_seed42/*" \
+    --output_base_dir "./output/GLIGEN" \
+    --task "spatial" \
+    --pkl_pth "./output/GLIGEN/spatial.pkl" \
+    --opts MODEL.WEIGHTS "Partitioned_COI_RS101_2x.pth"
+
+python src/detection/UniDet-master/demo.py \
+    --input "/mnt/nas5/AIBL-Research/shjo/250809_ISAC/output/GLIGEN/size_seed42/*" \
     --output_base_dir "./output/GLIGEN" \
     --task "size" \
-    --pkl_pth "size.pkl" \
+    --pkl_pth "./output/GLIGEN/size.pkl" \
     --opts MODEL.WEIGHTS "Partitioned_COI_RS101_2x.pth"
-```
-
-```python
-python demo.py --config-file [configs] \
---input [path_to_images]/* --pkl_pth [path_save] \
---output [detected_images] --opts MODEL.WEIGHTS [model_weight]
 ```
 Where:
 - `--input`: Folder of images that need to be evaluated
@@ -28,29 +36,6 @@ Where:
 - `--task`: The task to be performed (counting, spatial, size)
 - `--pkl_pth`: The path to the output .pkl file to save detected information
 - `--opts`: Path to the weights downloaded above
-eg.
-```bash
-python src/detection/UniDet-master/demo.py \
-    --input "/mnt/nas5/AIBL-Research/shjo/250809_ISAC/output/GLIGEN/counting_seed42/*" \
-    --output_base_dir "./output/GLIGEN" \
-    --task counting \
-    --pkl_pth "./output/GLIGEN/counting.pkl" \
-    --opts MODEL.WEIGHTS "Partitioned_COI_RS101_2x.pth"
-
-python src/detection/UniDet-master/demo.py \
-    --input "/mnt/nas5/AIBL-Research/shjo/250809_ISAC/output/GLIGEN/spatial_seed42/*" \
-    --output_base_dir "./output/GLIGEN" \
-    --task spatial \
-    --pkl_pth "./output/GLIGEN/spatial.pkl" \
-    --opts MODEL.WEIGHTS "Partitioned_COI_RS101_2x.pth"
-
-python src/detection/UniDet-master/demo.py \
-    --input "/mnt/nas5/AIBL-Research/shjo/250809_ISAC/output/GLIGEN/size_seed42/*" \
-    --output_base_dir "./output/GLIGEN" \
-    --task size \
-    --pkl_pth "./output/GLIGEN/size.pkl" \
-    --opts MODEL.WEIGHTS "Partitioned_COI_RS101_2x.pth"
-```
 
 
 ### Counting 
@@ -66,7 +51,7 @@ Run the
 [calc_spatial_relation_acc.py](compositions/calc_spatial_relation_acc.py)
 to calculate the spatial composition accuracy, as follows:
 ```bash
-python src/compositions/calc_spatial_relation_acc.py --in_pkl_path "output/GLIGEN/spatial.pkl"
+python src/compositions/calc_spatial_relation_acc.py --in_pkl_path "./output/GLIGEN/spatial.pkl"
 ```
 
 ### Size
@@ -74,52 +59,45 @@ Run the
 [calc_size_comp_acc.py](compositions/calc_size_comp_acc.py)
 to calculate the size composition accuracy, as follows:
 ```bash
-python src/compositions/calc_size_comp_acc.py --in_pkl_path output/GLIGEN/size.pkl
+python src/compositions/calc_size_comp_acc.py --in_pkl_path "./output/GLIGEN/size.pkl"
 ```
 
-Where:
-- `--in_pkl_path`: This is the output file from running UniDet as shown in the above steps.
+Where `--in_pkl_path` is the output file from running UniDet as shown in the above steps.
 
 
 ## Color Composition:
-We adopt [MaskDINO](https://arxiv.org/pdf/2206.02777.pdf) [CVPr 2023] for the instance segmentation.
-Download the [model weight](https://github.com/IDEA-Research/detrex-storage/releases/download/maskdino-v0.1.0/maskdino_swinl_50ep_300q_hid2048_3sd1_panoptic_58.3pq.pth), the corresponding [config](colors/MaskDINO/configs/coco/instance-segmentation/swin/maskdino_R50_bs16_50ep_4s_dowsample1_2048.yaml) 
-First, run the 
+We adopt [MaskDINO](https://arxiv.org/pdf/2206.02777.pdf) [CVPR 2023] for the instance segmentation.
+Download the [model weight](https://github.com/IDEA-Research/detrex-storage/releases/download/maskdino-v0.1.0/maskdino_swinl_50ep_300q_hid2048_3sd1_instance_maskenhanced_mask52.3ap_box59.0ap.pth) and the corresponding [config](colors/MaskDINO/configs/coco/instance-segmentation/swin/maskdino_R50_bs16_50ep_4s_dowsample1_2048.yaml).
+Before run, please compile `MultiScaleDeformableAttention` CUDA op with the following commands:
+```bash
+cd src/colors/MaskDINO/maskdino/modeling/pixel_decoder/ops
+sh make.sh
+```
+
+Now run the 
 [inference code](colors/MaskDINO/demo/demo.py)
 to predict the masks for each instance and save them as follows:
 ```bash
-cd data_evaluate_LLM/eval_metrics/colors/MaskDINO/demo
-python demo.py [Config File] [Input Images Directory] [Output Images Directory] [Model Weights]
+python src/colors/MaskDINO/demo/demo.py \
+    --input "/mnt/nas5/AIBL-Research/shjo/250809_ISAC/output/GLIGEN/color_seed42/*" \
+    --output_base_dir  "./output/GLIGEN" \
+    --opts MODEL.WEIGHTS "maskdino_swinl_50ep_300q_hid2048_3sd1_instance_maskenhanced_mask52.3ap_box59.0ap.pth"
 ```
 Where:
 
-- `Config File`: config of segmentation model
-- `Input Images`: Directory: path to folder images need to evaluate
-- `Output Images`: Directory: path to output of segmented mask
-- `Model weight`: path ot the model weight downloaded above
+- `--input`: Directory: path to folder images need to evaluate
+- `--output_base_dir`: Directory: path to output of segmented masks
+- `--opts`: path to the model weight downloaded above
 
-For instance:
-```
-
-python demo.py --config-file 'T2I_benchmark/codes/eval_metrics/colors/MaskDINO/configs/coco/instance-segmentation/swin/maskdino_R50_bs16_50ep_4s_dowsample1_2048.yaml' \
---input 'Attend-and-Excite/colors/*' \
---output Attend-and-Excite/ \
---opts MODEL.WEIGHTS T2I_benchmark/weights/mask_dino/maskdino_swinl_50ep_300q_hid2048_3sd1_instance_maskenhanced_mask52.3ap_box59.pth
-```
 
 Then, run the 
 [hue_based_color_classifier.py](colors/hue_based_color_classifier.py)
 to calculate the color composition accuracy, as follows:
-```python
-cd data_evaluate_LLM/eval_metrics/colors/
-python hue_based_color_classifier.py [Generated Masks Directory] [GT-csv] [T2I Model Output Directory]
+```bash
+python src/colors/hue_based_color_classifier.py \
+    --input_image_dir "/mnt/nas5/AIBL-Research/shjo/250809_ISAC/output/SD1.5/color_seed42" \
+    --input_mask_dir "/mnt/nas5/Public Dataset/HRSBench/output/SD1.5/color_detected_images"
 ```
 Where:
-- `Generated Masks Directory`: the Output Images Directory in previous running
-- `GT-csv`: is the csv file which can be generated by running the prompt generation code or downloaded directly from our published prompts.
-- `T2I Model Output Directory`:  path to folder images need to evaluate
-
-For instance:
-```bash
-python hue_based_color_classifier.py  'MaskDINO/demo/Attend-and-Excite' '../../HRS/colors_composition_prompts.csv' 'Attend-and-Excite/colors'
-```
+- `--input_image_dir`: Directory: path to folder of originally generated images
+- `--input_mask_dir`: Directory: path to folder of generated segmentation masks

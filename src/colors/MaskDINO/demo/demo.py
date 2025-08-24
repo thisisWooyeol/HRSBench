@@ -24,6 +24,8 @@ import cv2
 import numpy as np
 import tqdm
 
+from pathlib import Path
+
 from detectron2.config import get_cfg
 from detectron2.data.detection_utils import read_image
 from detectron2.projects.deeplab import add_deeplab_config
@@ -35,6 +37,7 @@ from predictor import VisualizationDemo
 
 # constants
 WINDOW_NAME = "mask2former demo"
+MASKDINO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def setup_cfg(args):
@@ -52,12 +55,10 @@ def get_parser():
     parser = argparse.ArgumentParser(description="maskdino demo for builtin configs")
     parser.add_argument(
         "--config-file",
-        default="configs/coco/instance-segmentation/maskdino_R50_bs16_50ep_3s.yaml",
+        default=MASKDINO_ROOT / "configs/coco/instance-segmentation/swin/maskdino_R50_bs16_50ep_4s_dowsample1_2048.yaml",
         metavar="FILE",
         help="path to config file",
     )
-    parser.add_argument("--webcam", action="store_true", help="Take inputs from webcam.")
-    parser.add_argument("--video-input", help="Path to video file.")
     parser.add_argument(
         "--input",
         nargs="+",
@@ -65,7 +66,9 @@ def get_parser():
         "or a single glob pattern such as 'directory/*.jpg'",
     )
     parser.add_argument(
-        "--output",
+        "--output_base_dir",
+        type=str,
+        required=True,
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
@@ -85,23 +88,6 @@ def get_parser():
     return parser
 
 
-def test_opencv_video_format(codec, file_ext):
-    with tempfile.TemporaryDirectory(prefix="video_format_test") as dir:
-        filename = os.path.join(dir, "test_file" + file_ext)
-        writer = cv2.VideoWriter(
-            filename=filename,
-            fourcc=cv2.VideoWriter_fourcc(*codec),
-            fps=float(30),
-            frameSize=(10, 10),
-            isColor=True,
-        )
-        [writer.write(np.zeros((10, 10, 3), np.uint8)) for _ in range(30)]
-        writer.release()
-        if os.path.isfile(filename):
-            return True
-        return False
-
-
 if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)
     args = get_parser().parse_args()
@@ -113,43 +99,49 @@ if __name__ == "__main__":
 
     demo = VisualizationDemo(cfg)
 
-    if args.input:
-        if len(args.input) == 1:
-            args.input = glob.glob(os.path.expanduser(args.input[0]))
-            assert args.input, "The input path(s) was not found"
-        for path in tqdm.tqdm(args.input, disable=not args.output):
-            # use PIL, to be consistent with evaluation
-            img = read_image(path, format="BGR")
-            start_time = time.time()
-            predictions = demo.run_on_image(img)
-            logger.info(
-                "{}: {} in {:.2f}s".format(
-                    path,
-                    "detected {} instances".format(len(predictions["instances"]))
-                    if "instances" in predictions
-                    else "finished",
-                    time.time() - start_time,
-                )
-            )
-            os.makedirs(args.output, exist_ok=True)
-            if args.output:
-                if os.path.isdir(args.output):
-                    assert os.path.isdir(args.output), args.output
-                    print('save')
-                    # os.makedirs(folder_name, exist_ok=True)
-                    
+    if len(args.input) == 1:
+        args.input = glob.glob(os.path.expanduser(args.input[0]))
+        assert args.input, "The input path(s) was not found"
+    for path in tqdm.tqdm(args.input, disable=not args.output_base_dir):
+        if ("png" not in path) and ("jpg" not in path):
+            continue
+        if ("layout.jpg" in path) or ("layout.png" in path):
+            continue
 
-                    # import pdb; pdb.set_trace()
-                    instances = predictions["instances"].to('cpu')
-                    # Eslam: Filter the output based on the confidence-score:
-                    mask = predictions["instances"].scores >= 0.5
-                    mask = mask.nonzero()
-                    mask = mask.to('cpu')
-                    img_name = os.path.basename(path).split(".")[0]
-                    # loop on predictions:
-                    for mask_idx in range(len(mask)):
-                        filtered_masks = instances.pred_masks[mask[mask_idx].to('cpu')][0]
-                        filtered_classes = instances.pred_classes[mask[mask_idx]]
-                        filtered_scores = instances.scores[mask[mask_idx]]
-                        out_filename = os.path.join(args.output, img_name+"_mask_"+str(mask_idx)+"_"+str(filtered_classes.cpu().item())+".png")
-                        cv2.imwrite(out_filename, filtered_masks.cpu().numpy()*255)
+        # use PIL, to be consistent with evaluation
+        img = read_image(path, format="BGR")
+        start_time = time.time()
+        predictions = demo.run_on_image(img)
+        logger.info(
+            "{}: {} in {:.2f}s".format(
+                path,
+                "detected {} instances".format(len(predictions["instances"]))
+                if "instances" in predictions
+                else "finished",
+                time.time() - start_time,
+            )
+        )
+
+        out_dir = Path(args.output_base_dir) / "color_detected_images"
+        os.makedirs(out_dir, exist_ok=True)
+        if os.path.isdir(out_dir):
+            assert os.path.isdir(out_dir), out_dir
+            print('save')
+            # os.makedirs(folder_name, exist_ok=True)
+            
+
+            # import pdb; pdb.set_trace()
+            instances = predictions["instances"].to('cpu')
+            # Eslam: Filter the output based on the confidence-score:
+            mask = predictions["instances"].scores >= 0.5
+            mask = mask.nonzero()
+            mask = mask.to('cpu')
+
+            img_name = Path(path).stem
+            # loop on predictions:
+            for mask_idx in range(len(mask)):
+                filtered_masks = instances.pred_masks[mask[mask_idx].to('cpu')][0]
+                filtered_classes = instances.pred_classes[mask[mask_idx]]
+                filtered_scores = instances.scores[mask[mask_idx]]
+                out_filename = os.path.join(out_dir, img_name+"_mask_"+str(mask_idx)+"_"+str(filtered_classes.cpu().item())+".png")
+                cv2.imwrite(out_filename, filtered_masks.cpu().numpy()*255)

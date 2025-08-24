@@ -1,11 +1,12 @@
+import argparse
 import json
 import os
 import os.path
-import sys
+from typing import Any
+from pathlib import Path
 
 import cv2
 import numpy as np
-import pandas as pd
 
 
 def detect_color_hue_based(hue_value):
@@ -109,40 +110,43 @@ coco_class_idx = {
 }
 
 
-def load_gt(csv_pth):
-    gt_data = pd.read_csv(csv_pth).to_dict("records")
+def load_gt(jsonl_pth: str) -> list[dict[str, Any]]:
+    """Load ground truth data from JSONL file."""
     gt_list = []
-    for sample in gt_data:
-        # Objects:
-        objs = [sample["obj1"], sample["obj2"]]
-        for i in range(3, 5):
-            if type(sample["obj" + str(i)]) is str:  # check if there is an object
-                objs.append(sample["obj" + str(i)])
+    with open(jsonl_pth, "r", encoding="utf-8") as f:
+        for line in f:
+            sample = json.loads(line.strip())
+            # Objects:
+            objs = [sample["expected_obj1"], sample["expected_obj2"]]
+            for i in range(3, 5):
+                if len(sample["expected_obj" + str(i)]) > 0:  # check if there is an object
+                    objs.append(sample["expected_obj" + str(i)])
 
-        # Colors:
-        colors = [sample["color1"], sample["color2"]]
-        for i in range(3, 5):
-            if type(sample["color" + str(i)]) is str:  # check if there is other colors
-                colors.append(sample["color" + str(i)])
+            # Colors:
+            colors = [sample["color1"], sample["color2"]]
+            for i in range(3, 5):
+                if len(sample["color" + str(i)]) > 0:  # check if there is other colors
+                    colors.append(sample["color" + str(i)])
 
-        gt_list.append(
-            {"prompt": sample["meta_prompt"], "objs": objs, "colors": colors}
-        )
+            gt_list.append(
+                {"prompt": sample["prompt"], "objs": objs, "colors": colors, "level": sample["level"]}
+            )
 
     return gt_list
 
 
-def load_pred(pred_masks_names, iter_idx, data_len, gt_data):
+def load_pred(pred_masks_names, data_len, gt_data):
     img_masks_names_dict = {}
     for idx in range(data_len):
         prompt = gt_data[idx]["prompt"]
+        level = gt_data[idx]["level"]
         # img_name = str(idx).zfill(5)+"_"+str(iter_idx).zfill(2)
-        img_name = str(idx) + "_" + prompt.replace(" ", "_")
+        img_name = str(idx) + "_" + str(level) + "_" + prompt.replace(" ", "_")
         # import pdb; pdb.set_trace()
         img_masks_names = [
             pred_masks_name
             for pred_masks_name in pred_masks_names
-            if img_name[:-1] in pred_masks_name
+            if img_name in pred_masks_name
         ]
         img_masks_names_dict[img_name] = img_masks_names
 
@@ -150,32 +154,55 @@ def load_pred(pred_masks_names, iter_idx, data_len, gt_data):
 
 
 def cal_acc(
-    gt_data, img_masks_names_dict, level, iter_idx, t2i_out_dir, in_masks_folder
+    gt_data, img_masks_names_dict, level, t2i_out_dir, in_masks_folder
 ):
     true_counter = 0
     total_num_objs = 0
-    mul = int(len(gt_data) / 3)
-    gt_data_per_level = gt_data[level * mul : (level + 1) * mul]
-    for idx in range(len(gt_data_per_level)):  # loop on samples
-        if idx + (level * mul) == 500 or idx + (level * mul) == 131:
+
+    for idx, gt_entry in enumerate(gt_data):
+        if gt_entry["level"] != level:
             continue
-        gt_objs = gt_data_per_level[idx]["objs"]
+
+        gt_objs = gt_entry["objs"]
         total_num_objs += len(gt_objs)
-        gt_colors = gt_data_per_level[idx]["colors"]
-        prompt = gt_data_per_level[idx]["prompt"]
-        img_name = str(idx + (level * mul)) + "_" + prompt.replace(" ", "_")
+        gt_colors = gt_entry["colors"]
+        prompt = gt_entry["prompt"]
+        img_name = str(idx) + "_" + str(level) + "_" + prompt.replace(" ", "_")
         img = cv2.imread(os.path.join(t2i_out_dir, img_name) + ".jpg")
+        if img is None:
+            print(f"Warning: Could not load image {img_name}.jpg")
+            continue
+        
+        # Debug: check if we have mask matches
+        img_masks_names_per_sample = img_masks_names_dict.get(img_name, [])
+        if not img_masks_names_per_sample:
+            print(f"Warning: No masks found for image {img_name}")
+            continue
+        
+        print(f"Processing sample {idx}: {len(gt_objs)} objects, {len(img_masks_names_per_sample)} masks")
+        
         hsv_frame = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         hsv_frame = hsv_frame[:, :, 0]
-        img_masks_names_per_sample = img_masks_names_dict[img_name]
         # import pdb; pdb.set_trace()
         for obj_idx in range(len(gt_objs)):  # loop on GT objs
             # 1) make sure the classes are correct:
             gt_obj_id = coco_class_idx[gt_objs[obj_idx]]
+            print(f"  Looking for {gt_objs[obj_idx]} (class {gt_obj_id})")
+            
             img_masks_name_per_class = []
+            detected_classes = set()
             for img_masks_name in img_masks_names_per_sample:
-                if int(img_masks_name.split("_")[-1].split(".")[0]) == gt_obj_id:
-                    img_masks_name_per_class.append(img_masks_name)
+                try:
+                    detected_class_id = int(img_masks_name.split("_")[-1].split(".")[0])
+                    detected_classes.add(detected_class_id)
+                    if detected_class_id == gt_obj_id:
+                        img_masks_name_per_class.append(img_masks_name)
+                except (ValueError, IndexError):
+                    print(f"  Warning: Could not parse class ID from {img_masks_name}")
+            
+            print(f"  Detected classes: {sorted(detected_classes)}")
+            print(f"  Matching masks for {gt_objs[obj_idx]}: {len(img_masks_name_per_class)}")
+            
             if len(img_masks_name_per_class):
                 # found some predictions match GT class
                 # 2) make sure the color is correct:
@@ -184,6 +211,9 @@ def cal_acc(
                         os.path.join(in_masks_folder, img_masks_name_per_class[i]),
                         cv2.IMREAD_GRAYSCALE,
                     )
+                    if mask is None:
+                        print(f"Warning: Could not load mask {img_masks_name_per_class[i]}")
+                        continue
                     mask = mask / 255.0
                     mask = mask.astype(np.uint8)  # [0->1]
                     hsv_frame_masked = np.multiply(hsv_frame, mask)
@@ -199,56 +229,82 @@ def cal_acc(
 
 
 if __name__ == "__main__":
-    """
-    Example:
-    python hue_based_color_classifier.py  'T2I_benchmark/data/colors/output/sd_v1' 'T2I_benchmark/data/colors/colors_composition_prompts.csv' 't2i_benchmark/data/t2i_out/sd_v1/colors'
-    """
-    in_masks_folder = sys.argv[1]
-    gt_csv = sys.argv[2]
-    t2i_out_dir = sys.argv[3]
+    parser = argparse.ArgumentParser(
+        description="Evaluate color classification accuracy using hue-based classifier"
+    )
+    parser.add_argument(
+        "--input_image_dir", 
+        type=str, 
+        required=True,
+        help="Path to the generated images directory"
+    )
+    
+    parser.add_argument(
+        "--input_mask_dir", 
+        type=str, 
+        required=True,
+        help="Path to the mask directory"
+    )
+    parser.add_argument(
+        "--gt_jsonl_path", 
+        type=str, 
+        default="./hrs_dataset/color.jsonl",
+        help="Path to ground truth JSONL file"
+    )
+    args = parser.parse_args()
+    
     # Load GT:
-    gt_data = load_gt(csv_pth=gt_csv)
-    pred_masks_names = os.listdir(in_masks_folder)
-    iter_num = 1
+    gt_data = load_gt(jsonl_pth=args.gt_jsonl_path)
+    pred_masks_names = os.listdir(args.input_mask_dir)
+
+    # Load Predictions:
+    img_masks_names_dict = load_pred(
+        pred_masks_names=pred_masks_names,
+        data_len=len(gt_data),
+        gt_data=gt_data,
+    )
+
+    NUM_LEVEL = 3
     avg_acc = []
-    acc_per_level = {0: [], 1: [], 2: []}
-    for iter_idx in range(iter_num):
-        for level in range(3):
-            # Load Predictions:
-            img_masks_names_dict = load_pred(
-                pred_masks_names=pred_masks_names,
-                iter_idx=iter_idx,
-                data_len=len(gt_data),
-                gt_data=gt_data,
-            )
-            # Calculate the counting Accuracy:
-            acc = cal_acc(
-                gt_data,
-                img_masks_names_dict,
-                level=level,
-                iter_idx=iter_idx,
-                t2i_out_dir=t2i_out_dir,
-                in_masks_folder=in_masks_folder,
-            )
-            avg_acc.append(acc)
-            print("Accuracy ", iter_idx, ": ", acc, "%")
-            # Per level:
-            acc_per_level[level].append(acc)
-    all_results = {"acc": acc_per_level, "avg": sum(avg_acc) / len(avg_acc)}
-    root = in_masks_folder.split("demo")[0] + in_masks_folder.split("demo")[1]
-    with open(os.path.join(root + "result.json"), "w") as f:
-        json.dump(all_results, f, sort_keys=True, indent=4)
-    for level in range(3):
-        print("----------------------------")
-        if level == 0:
-            print("   Easy level Results   ")
-        elif level == 1:
-            print("   Medium level Results   ")
-        elif level == 2:
-            print("   Hard level Results   ")
-        print(
-            "precision: ", (sum(acc_per_level[level]) / len(acc_per_level[level])), "%"
+    acc_per_level = {1: [], 2: [], 3: []}
+    for level in range(1, NUM_LEVEL + 1):
+        # Calculate the counting Accuracy:
+        acc = cal_acc(
+            gt_data,
+            img_masks_names_dict,
+            level=level,
+            t2i_out_dir=args.input_image_dir,
+            in_masks_folder=args.input_mask_dir,
         )
-    print("----------------------------")
-    print("   Average level Results   ")
-    print("Averaged Accuracy: ", (sum(avg_acc) / len(avg_acc)), "%")
+        avg_acc.append(acc)
+        acc_per_level[level].append(acc)
+
+        # Print iteration results for this level
+        level_name = ["", "Easy", "Medium", "Hard"][level]
+        print(f"{level_name} Level - Accuracy: {acc:.2f} %")
+
+    # Prepare results dictionary
+    all_results = {"acc": acc_per_level, "avg": sum(avg_acc) / len(avg_acc)}
+    
+    # Save results to JSON file
+    result_dir = Path(args.input_mask_dir).resolve().parent
+    result_path = os.path.join(result_dir, "color_results.json")
+    with open(result_path, "w") as f:
+        json.dump(all_results, f, sort_keys=True, indent=4)
+
+    print("\n" + "="*50)
+    print("FINAL RESULTS SUMMARY")
+    print("="*50)    
+
+    # Print per-level average results
+    for level in range(1, NUM_LEVEL + 1):
+        level_name = ["", "Easy", "Medium", "Hard"][level]
+
+        acc = acc_per_level[level][0] if acc_per_level[level] else 0.0
+        print(f"\n {level_name} Level - Accuracy: {acc:.2f} %")
+    
+    # Print overall average results
+    print(f"\n Overall Average - Accuracy: {sum(avg_acc) / len(avg_acc):.2f} %")
+
+    print(f"\nResults saved to {result_path}")
+    print("Done!")
