@@ -126,7 +126,8 @@ if __name__ == "__main__":
         pred_objs = np.hstack((pred_objs_cord, pred_objs_cls_name))
         if len(pred_objs) > 0:  # handle the case of empty predictions
             # Remove repeated cord
-            pred_filtered = {0: [pred_objs[0]]}
+            # pred_filtered = {0: [pred_objs[0]]}
+            pred_filtered = {}
             for idx in range(pred_objs.shape[0]):
                 found = False
                 for k, v in pred_filtered.items():
@@ -144,13 +145,13 @@ if __name__ == "__main__":
 
         img_name = path.split("/")[-1].split(".")[0]
 
-        # iter_idx = int(img_name.split("_")[1])
-        iter_idx = 0
-        # print(int(img_name.split("_")[0]))
+        img_idx = Path(path).stem.split("_")[0]
+        # level = int(Path(path).stem.split("_")[1])
 
-        if iter_idx not in output_lst_dict.keys():
-            output_lst_dict[iter_idx] = {}
-        output_lst_dict[iter_idx][int(img_name.split("_")[0])] = pred_filtered
+        if img_idx not in output_lst_dict.keys():
+            output_lst_dict[img_idx] = {}
+        output_lst_dict[img_idx] = pred_filtered
+        # output_lst_dict[img_idx]["level"] = level
         # with open(args.pkl_pth, 'wb') as f:
         #     pickle.dump(output_lst_dict, f)
         # assert False

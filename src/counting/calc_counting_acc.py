@@ -1,188 +1,205 @@
+import argparse
 import json
-import os
 import pickle
-import sys
-
-import pandas as pd
-
-
-def convert_csv_2_txt():
-    meta_f = open("meta_emotions.txt", "w")
-    synthetic_f = open("synthetic_emotions.txt", "w")
-    data = pd.read_csv("/home/eslam/Downloads/synthetic_emotion_prompts.csv").to_dict(
-        "records"
-    )
-    for sample in data:
-        meta_f.write(sample["meta_prompt"] + "\n")
-        synthetic_f.write(sample["synthetic_prompt"] + "\n")
-    meta_f.close()
-    synthetic_f.close()
+import warnings
+from typing import Any
 
 
-def load_gt(csv_pth):
-    gt_data = pd.read_csv(csv_pth).to_dict("records")
-    gt_obj = []
-    # import pdb; pdb.set_trace()
-    for i, sample in enumerate(gt_data):
-        # if i< 1500 or i > 1576: continue
-        temp_dict = {sample["obj1"]: sample["n1"]}
-        if sample["n2"] > 0:
-            temp_dict[sample["obj2"]] = sample["n2"]
-        gt_obj.append(temp_dict)
-
-    return gt_obj
-
-
-def load_multi_pred(list_pkl_path, iter_idx):
-    result = {iter_idx: {}}
-    # result.update({iter_idx:{}})
-    for pkl_path in list_pkl_path:
-        with open(pkl_path, "rb") as f:
-            pred_data = pickle.load(f)
-        result[iter_idx].update(pred_data[iter_idx])
-    result = result[iter_idx]
-    pred_objs = {}
-    for img_id, v in result.items():
-        temp_dict = {}
-        for obj_id, v2 in v.items():
-            temp_lst = []
-            for item in v2:
-                temp_lst.append(item[-1].lower())
-            temp_dict[obj_id] = temp_lst
-
-        pred_objs[img_id] = temp_dict
-    return pred_objs
+def load_gt(jsonl_path: str) -> list[dict[str, Any]]:
+    """
+    Example entry:
+    {
+        'prompt': 'two cups filled with steaming hot coffee sit side-by-side on a wooden table.', 
+        'phrases': ['cup', 'cup', 'table', 'steam', 'steam'], 
+        'bounding_boxes': [[0.25, 0.390625, 0.47265625, 0.5625], [0.52734375, 0.390625, 0.75, 0.5625], [0.0390625, 0.625, 0.9609375, 1.0], [0.361328125, 0.3359375, 0.419921875, 0.390625], [0.638671875, 0.3359375, 0.697265625, 0.390625]], 
+        'num_objects': 5, 'num_bboxes': 5, 
+        'vanilla_prompt': '2 cup', 
+        'expected_n1': 2, 'expected_obj1': 'cup', 
+        'expected_n2': 0, 'expected_obj2': '', 
+        'level': 1
+    }
+    """
+    gt_data = []
+    with open(jsonl_path, "r") as f:
+        for line in f:
+            gt_data.append(json.loads(line))
+    return gt_data
 
 
-def load_pred(pkl_pth, iter_idx):
+def load_pred(pkl_pth) -> dict[str, dict[int, list[Any]]]:
+    """
+    Example entry:
+    data["0"] = {
+        0: [array(['44.324688', '79.604744', '438.88803', '287.82706', 'airplane'],dtype='<U32')], 
+        1: [array(['179.65254', '248.52257', '331.5779', '375.03128', 'car'],dtype='<U32')]
+    }
+    """
     with open(pkl_pth, "rb") as f:
         pred_data = pickle.load(f)
-    # import pdb; pdb.set_trace()
-    pred_data = pred_data[iter_idx]
-    # Keep class info only. Discard box coordinates info:
-    pred_objs = {}
-    for img_id, v in pred_data.items():
-        temp_dict = {}
-        for obj_id, v2 in v.items():
-            temp_lst = []
-            for item in v2:
-                temp_lst.append(item[-1].lower())
-            temp_dict[obj_id] = temp_lst
-
-        pred_objs[img_id] = temp_dict
-
-    return pred_objs
+    return pred_data
 
 
-def cal_acc(gt_objs, pred_objs, level):
-    # Calculate the Acc:
+def compare_entry(gt_entry: dict[str, Any], pred_entry: dict[int, list[Any]]) -> tuple[int, int, int]:
+    """
+    Compare the ground truth entry with the predicted entry.
+
+    Returns:
+    tuple[int, int, int]: A tuple containing the number of true positives, false positives, and false negatives.
+    """
     true_pos = 0
     false_pos = 0
     false_neg = 0
+    
+    obj1 = gt_entry["expected_obj1"]
+    n1 = gt_entry["expected_n1"]
+    obj2 = gt_entry["expected_obj2"] if gt_entry["expected_obj2"] else None
+    n2 = gt_entry["expected_n2"]
 
-    for img_id, sample in enumerate(gt_objs):
-        img_id += level * int(len(gt_objs))
+    obj1_pred = obj2_pred = 0
+    for pred in pred_entry.values():
+        if pred[0][-1] == obj1:
+            obj1_pred += 1
+        elif obj2 and pred[0][-1] == obj2:
+            obj2_pred += 1
 
-        for obj_name, gt_num in sample.items():
-            pred_num = 0
+    # Calculate metrics for object 1
+    true_pos += min(n1, obj1_pred)
+    false_pos += max(0, obj1_pred - n1)
+    false_neg += max(0, n1 - obj1_pred)
 
-            if img_id not in pred_objs.keys():
-                continue
-            # print(img_id)
-            for k, pred_obj in pred_objs[img_id].items():
-                if obj_name in pred_obj:
-                    pred_num += 1
-            true_pos += min(gt_num, pred_num)
-            false_pos = false_pos + max((pred_num - gt_num), 0)
-            false_neg = false_neg + max((gt_num - pred_num), 0)
+    # Calculate metrics for object 2 (if exists)
+    if obj2 and n2 > 0:
+        true_pos += min(n2, obj2_pred)
+        false_pos += max(0, obj2_pred - n2)
+        false_neg += max(0, n2 - obj2_pred)
 
-    breakpoint()
-    precision = true_pos / (true_pos + false_pos)
-    recall = true_pos / (true_pos + false_neg)
-    return [precision, recall]
+    return true_pos, false_pos, false_neg
 
+def calc_accuracy(gt_data: list[dict[str, Any]], pred_data: dict[str, dict[int, list[Any]]], level : int) -> tuple[float, float]:
+    """
+    Calculate precision and recall based on ground truth and predicted data. Only consider objects at the given level.
+
+    Returns:
+        tuple[float, float]: A tuple containing precision and recall.
+    """
+    total_true_pos = 0
+    total_false_pos = 0
+    total_false_neg = 0
+
+    for idx, gt_entry in enumerate(gt_data):
+        img_id = str(idx)
+        if gt_entry['level'] != level:
+            continue
+        if img_id in pred_data:
+            pred_entry = pred_data[img_id]
+            true_pos, false_pos, false_neg = compare_entry(gt_entry, pred_entry)
+            total_true_pos += true_pos
+            total_false_pos += false_pos
+            total_false_neg += false_neg
+        else:
+            warnings.warn(f"Image ID {img_id} not found in predictions. Please check the input data.")
+
+    precision = total_true_pos / (total_true_pos + total_false_pos) if (total_true_pos + total_false_pos) > 0 else 0.0
+    recall = total_true_pos / (total_true_pos + total_false_neg) if (total_true_pos + total_false_neg) > 0 else 0.0
+
+    return precision, recall
 
 if __name__ == "__main__":
-    in_pkl = sys.argv[1]
-    gt_csv = sys.argv[2]
-    iter_num = int(sys.argv[3])  # e.g., 1
-    # Load GT:
-    gt_objs = load_gt(csv_pth=gt_csv)
-    precisions, recalls, f1 = [], [], []
-    precisions_per_level = {0: [], 1: [], 2: []}
-    recalls_per_level = {0: [], 1: [], 2: []}
-    f1_per_level = {0: [], 1: [], 2: []}
-    in_pkl_list = sys.argv[1].split(",")
-    if len(in_pkl_list) == 1:
-        num_level = 1
-        single_pred = True
-        in_pkl = in_pkl_list[0]
-    else:
-        num_level = 3
-        single_pred = False
+    parser = argparse.ArgumentParser(description="Calculate counting accuracy.")
+    parser.add_argument(
+        "--in_pkl_path", 
+        type=str, 
+        required=True,
+        help="Path to the input pickle file."
+    )
+    parser.add_argument(
+        "--gt_jsonl_path", 
+        type=str, 
+        default="./hrs_dataset/counting.jsonl",
+        help="Path to the ground truth JSONL file.",
+    )
+    args = parser.parse_args()
 
-    for iter_idx in range(iter_num):
-        for level in range(num_level):
-            mul = int(len(gt_objs) / num_level)
+    gt_data = load_gt(jsonl_path=args.gt_jsonl_path)
+    pred_data = load_pred(pkl_pth=args.in_pkl_path)
 
-            if single_pred:
-                pred_objs = load_pred(pkl_pth=in_pkl, iter_idx=iter_idx)
-            else:
-                pred_objs = load_multi_pred(
-                    list_pkl_path=in_pkl_list, iter_idx=iter_idx
-                )
-            # Calculate the counting Accuracy:
-            precision, recall = cal_acc(
-                gt_objs[level * mul : (level + 1) * mul], pred_objs, level=level
-            )
-            precision *= 100
-            recall *= 100
-            precisions.append(precision)
-            recalls.append(recall)
-            f1.append((2 * precision * recall) / (precision + recall))
-            print("precision ", iter_idx, ": ", precision, "%")
-            print("recall ", iter_idx, ": ", recall, "%")
-            print("F1 Score ", iter_idx, ": ", f1[-1], "%")
-            # Per level:
-            precisions_per_level[level].append(precision)
-            recalls_per_level[level].append(recall)
-            f1_per_level[level].append((2 * precision * recall) / (precision + recall))
+    NUM_LEVEL = 3
+    # Initialize result storage
+    precisions_per_level = {1: [], 2: [], 3: []}
+    recalls_per_level = {1: [], 2: [], 3: []}
+    f1_per_level = {1: [], 2: [], 3: []}
+    all_precisions = []
+    all_recalls = []
+    all_f1 = []
+
+    # Calculate accuracy for each level
+    for level in range(1, NUM_LEVEL + 1):
+        precision, recall = calc_accuracy(gt_data, pred_data, level)
+        
+        # Convert to percentage
+        precision *= 100
+        recall *= 100
+        
+        # Calculate F1 score
+        if precision + recall > 0:
+            f1 = (2 * precision * recall) / (precision + recall)
+        else:
+            f1 = 0.0
+        
+        # Store results
+        precisions_per_level[level].append(precision)
+        recalls_per_level[level].append(recall)
+        f1_per_level[level].append(f1)
+        all_precisions.append(precision)
+        all_recalls.append(recall)
+        all_f1.append(f1)
+        
+        # Print iteration results for this level
+        level_name = ["", "Easy", "Medium", "Hard"][level]
+        print(f"{level_name} Level - Precision: {precision:.2f}%, Recall: {recall:.2f}%, F1: {f1:.2f}%")
+
+    # Prepare results dictionary
+    avg_precision = sum(all_precisions) / len(all_precisions) if all_precisions else 0.0
+    avg_recall = sum(all_recalls) / len(all_recalls) if all_recalls else 0.0
+    avg_f1_score = sum(all_f1) / len(all_f1) if all_f1 else 0.0
+    
     all_results = {
-        "pre": precisions_per_level,
-        "recall": recalls_per_level,
-        "f1": f1_per_level,
-        "avg": {
-            "pre": sum(precisions) / len(precisions),
-            "recal": sum(recalls) / len(recalls),
-            "f1": sum(f1) / len(f1),
+        "precisions_per_level": precisions_per_level,
+        "recalls_per_level": recalls_per_level,
+        "f1_per_level": f1_per_level,
+        "average": {
+            "precision": avg_precision,
+            "recall": avg_recall,
+            "f1": avg_f1_score,
         },
     }
-    root = in_pkl.split("pkl")[0]
-    with open(os.path.join(root + "result.json"), "w") as f:
-        json.dump(all_results, f, sort_keys=True, indent=4)
-    for level in range(3):
-        print("----------------------------")
-        if level == 0:
-            print("   Easy level Results   ")
-        elif level == 1:
-            print("   Medium level Results   ")
-        elif level == 2:
-            print("   Hard level Results   ")
 
-        print(
-            "precision: ",
-            (sum(precisions_per_level[level]) / len(precisions_per_level[level])),
-            "%",
-        )
-        print(
-            "recall: ",
-            (sum(recalls_per_level[level]) / len(recalls_per_level[level])),
-            "%",
-        )
-        print("F1 Score : ", (sum(f1_per_level[level]) / len(f1_per_level[level])), "%")
-    print("----------------------------")
-    print("   Average level Results   ")
-    print("precision: ", (sum(precisions) / len(precisions)), "%")
-    print("recall: ", (sum(recalls) / len(recalls)), "%")
-    print("F1 Score : ", (sum(f1) / len(f1)), "%")
+    # Save results to JSON file
+    result_path = args.in_pkl_path.replace('.pkl', '_results.json')
+    with open(result_path, "w") as f:
+        json.dump(all_results, f, sort_keys=True, indent=4)
+    
+    print("\n" + "="*50)
+    print("FINAL RESULTS SUMMARY")
+    print("="*50)
+    
+    # Print per-level average results
+    for level in range(1, NUM_LEVEL + 1):
+        level_name = ["", "Easy", "Medium", "Hard"][level]
+        level_avg_precision = sum(precisions_per_level[level]) / len(precisions_per_level[level]) if precisions_per_level[level] else 0.0
+        level_avg_recall = sum(recalls_per_level[level]) / len(recalls_per_level[level]) if recalls_per_level[level] else 0.0
+        level_avg_f1 = sum(f1_per_level[level]) / len(f1_per_level[level]) if f1_per_level[level] else 0.0
+        
+        print(f"\n{level_name} Level Results:")
+        print(f"  Precision: {level_avg_precision:.2f}%")
+        print(f"  Recall: {level_avg_recall:.2f}%") 
+        print(f"  F1 Score: {level_avg_f1:.2f}%")
+    
+    # Print overall average results
+    print("\nOverall Average Results:")
+    print(f"  Precision: {avg_precision:.2f}%")
+    print(f"  Recall: {avg_recall:.2f}%")
+    print(f"  F1 Score: {avg_f1_score:.2f}%")
+    
+    print(f"\nResults saved to: {result_path}")
     print("Done!")
