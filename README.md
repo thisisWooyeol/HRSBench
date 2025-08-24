@@ -29,6 +29,12 @@ The dataset includes four main categories: spatial relationship, color, size, an
 And there are also mysteriously missing prompts in `*.p` pickle files, last lines for all datasets. Therefore, 2,990/896/423/483 unique prompts can be evaluated.
 
 
-# How to use
+# How to evaluate
+
+Setup virtual environment first:
+```bash
+uv sync
+source .venv/bin/activate
+```
 
 ## Step-1: Generate Images with HRS prompts (and optionally with box layouts)

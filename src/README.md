@@ -9,23 +9,33 @@ Run the
 [inference code](detection/UniDet-master/demo.py)
 to generate the bounding boxes and save them as follows:
 ```bash
-cd data_evaluate_LLM/eval_metrics/detection/UniDet-master
+python src/detection/UniDet-master/demo.py \
+    --input "/path/to/image_dir/*" \
+    --output_base_dir "./output/GLIGEN" \
+    --task "size" \
+    --pkl_pth "size.pkl" \
+    --opts MODEL.WEIGHTS "Partitioned_COI_RS101_2x.pth"
 ```
+
 ```python
 python demo.py --config-file [configs] \
 --input [path_to_images]/* --pkl_pth [path_save] \
 --output [detected_images] --opts MODEL.WEIGHTS [model_weight]
 ```
 Where:
-- `--config-file`: use  configs/Partitioned_COI_RS101_2x.yaml config
 - `--input`: Folder of images that need to be evaluated
+- `--output_base_dir`: Path to the folder to save visually detected images
+- `--task`: The task to be performed (counting, spatial, size)
 - `--pkl_pth`: The path to the output .pkl file to save detected information
-- `--output`: Path to the folder to save visually detected images
 - `--opts`: Path to the weights downloaded above
 eg.
 ```bash
-python demo.py --config-file configs/Partitioned_COI_RS101_2x.yaml --input  
-"GLIGEN/visual/counting_500_img/*" --pkl_pth "../../counting/counting_500_1499.pkl"  --output "detected" --opts MODEL.WEIGHTS "Partitioned_COI_RS101_2x.pth"
+python src/detection/UniDet-master/demo.py \
+    --input "/mnt/nas5/AIBL-Research/shjo/250809_ISAC/output/GLIGEN/size_seed42/*" \
+    --output_base_dir "./output/GLIGEN" \
+    --task size \
+    --pkl_pth "size.pkl" \
+    --opts MODEL.WEIGHTS "Partitioned_COI_RS101_2x.pth"
 ```
 
 

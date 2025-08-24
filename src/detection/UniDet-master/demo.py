@@ -1,28 +1,4 @@
-"""
---config-file configs/Unified_learned_OCIM_RS200_6x+2x.yaml
---input "../../../../data/t2i_out/sd_v1/samples/*"
---output "../../../../data/metrics/det/unified_det"
---opts MODEL.WEIGHTS "../../../../weights/unified_det/Unified_learned_OCIM_RS200_6x+2x.pth"
-"""
-
-"""
---config-file configs/Unified_learned_OCIM_R50_6x+2x.yaml --input images/*.jpg 
---opts MODEL.WEIGHTS ../../../../weights/unified_det/Unified_learned_OCIM_R50_6x+2x.pth
-"""
-"""
---config-file configs/Unified_learned_OCIM_RS200_6x+2x.yaml 
---input "../../../../data/t2i_out/sd_v2/vanilla_counting/*" 
---output "../../../../data/metrics/det/unified_det" 
---opts MODEL.WEIGHTS "../../../../weights/unified_det/Unified_learned_OCIM_RS200_6x+2x.pth"
-"""
-"""
---config-file configs/Partitioned_COI_RS101_2x.yaml 
---input "../../../../data/t2i_out/sd_v2/meta_counting/*" 
---output "../../../../data/metrics/det/unified_det" 
---pkl_pth "../../counting/sdv1_pred_meta_counting.pkl"
---opts MODEL.WEIGHTS "../../../../weights/unified_det/Partitioned_COI_RS101_2x.pth"
-"""
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import argparse
 import glob
 import multiprocessing as mp
@@ -36,11 +12,14 @@ import tqdm
 from detectron2.config import get_cfg
 from detectron2.data.detection_utils import read_image
 from detectron2.utils.logger import setup_logger
+from pathlib import Path
+
 from unidet.config import add_unidet_config
 from unidet.predictor import UnifiedVisualizationDemo
 
 # constants
 WINDOW_NAME = "Unified detections"
+UNIDET_ROOT = Path(__file__).resolve().parent
 
 
 def setup_cfg(args):
@@ -55,6 +34,7 @@ def setup_cfg(args):
     cfg.MODEL.PANOPTIC_FPN.COMBINE.INSTANCES_CONFIDENCE_THRESH = (
         args.confidence_threshold
     )
+    cfg.MULTI_DATASET.UNIFIED_LABEL_FILE = str(UNIDET_ROOT / cfg.MULTI_DATASET.UNIFIED_LABEL_FILE)
     cfg.freeze()
     return cfg
 
@@ -63,14 +43,10 @@ def get_parser():
     parser = argparse.ArgumentParser(description="Detectron2 demo for builtin models")
     parser.add_argument(
         "--config-file",
-        default="configs/quick_schedules/mask_rcnn_R_50_FPN_inference_acc_test.yaml",
+        default=UNIDET_ROOT / "configs/Partitioned_COI_RS101_2x.yaml",
         metavar="FILE",
         help="path to config file",
     )
-    parser.add_argument(
-        "--webcam", action="store_true", help="Take inputs from webcam."
-    )
-    parser.add_argument("--video-input", help="Path to video file.")
     parser.add_argument(
         "--input",
         nargs="+",
@@ -78,9 +54,17 @@ def get_parser():
         "or a single glob pattern such as 'directory/*.jpg'",
     )
     parser.add_argument(
-        "--output",
+        "--output_base_dir",
+        type=str,
+        required=True,
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
+    )
+    parser.add_argument(
+        "--task",
+        type=str,
+        choices=["counting", "spatial", "size"],
+        help="HRSBench task to perform"
     )
 
     parser.add_argument(
@@ -114,136 +98,84 @@ if __name__ == "__main__":
 
     demo = UnifiedVisualizationDemo(cfg)
 
-    if args.input:
-        output_lst_dict = {}
-        if len(args.input) == 1:
-            # import pdb; pdb.set_trace()
-            args.input = glob.glob(os.path.expanduser(args.input[0]))
-            assert args.input, "The input path(s) was not found"
-        for path in tqdm.tqdm(args.input, disable=not args.output):
-            if ("png" not in path) and ("jpg" not in path):
-                continue
-            # img_name = path.split("/")[-1].split(".")[0]
-            # if int(img_name.split("_")[0]) > 200 or int(img_name.split("_")[0]) < 100: continue
-            # use PIL, to be consistent with evaluation
-            img = read_image(path, format="BGR")
-            start_time = time.time()
-            predictions, visualized_output = demo.run_on_image(img)
+    output_lst_dict = {}
+    if len(args.input) == 1:
+        # import pdb; pdb.set_trace()
+        args.input = glob.glob(os.path.expanduser(args.input[0]))
+        assert args.input, "The input path(s) was not found"
+    for path in tqdm.tqdm(args.input, disable=not args.output_base_dir):
+        if ("png" not in path) and ("jpg" not in path):
+            continue
+        if ("layout.jpg" in path) or ("layout.png" in path):
+            continue
+        # img_name = path.split("/")[-1].split(".")[0]
+        # if int(img_name.split("_")[0]) > 200 or int(img_name.split("_")[0]) < 100: continue
+        # use PIL, to be consistent with evaluation
+        img = read_image(path, format="BGR")
+        start_time = time.time()
+        predictions, visualized_output = demo.run_on_image(img)
 
-            pred_objs_cord = predictions["instances"].pred_boxes.tensor.cpu().numpy()
-            pred_objs_cls_name = np.array(
-                [
-                    demo.metadata.thing_classes[cls_id]
-                    for cls_id in predictions["instances"].pred_classes.cpu().numpy()
-                ]
-            )
-            pred_objs_cls_name = np.reshape(pred_objs_cls_name, (-1, 1))
-            pred_objs = np.hstack((pred_objs_cord, pred_objs_cls_name))
-            if len(pred_objs) > 0:  # handle the case of empty predictions
-                # Remove repeated cord
-                pred_filtered = {0: [pred_objs[0]]}
-                for idx in range(pred_objs.shape[0]):
-                    found = False
-                    for k, v in pred_filtered.items():
-                        if (
-                            pred_objs[idx][0:4].astype(float).astype(int)
-                            == v[0][0:4].astype(float).astype(int)
-                        ).all():
-                            found = True
-                            pred_filtered[k].append(pred_objs[idx])
-                            break
-                    if found == False:
-                        pred_filtered[idx] = [pred_objs[idx]]
-            else:
-                pred_filtered = {0: [[0, 0, 0, 0, ""]]}
-
-            img_name = path.split("/")[-1].split(".")[0]
-
-            # iter_idx = int(img_name.split("_")[1])
-            iter_idx = 0
-            # print(int(img_name.split("_")[0]))
-
-            if iter_idx not in output_lst_dict.keys():
-                output_lst_dict[iter_idx] = {}
-            output_lst_dict[iter_idx][int(img_name.split("_")[0])] = pred_filtered
-            # with open(args.pkl_pth, 'wb') as f:
-            #     pickle.dump(output_lst_dict, f)
-            # assert False
-            logger.info(
-                "{}: {} in {:.2f}s".format(
-                    path,
-                    "detected {} instances".format(len(predictions["instances"]))
-                    if "instances" in predictions
-                    else "finished",
-                    time.time() - start_time,
-                )
-            )
-            os.makedirs(args.output, exist_ok=True)
-            if args.output:
-                if os.path.isdir(args.output):
-                    assert os.path.isdir(args.output), args.output
-                    out_filename = os.path.join(args.output, os.path.basename(path))
-                else:
-                    assert len(args.input) == 1, (
-                        "Please specify a directory with args.output"
-                    )
-                    out_filename = args.output
-                visualized_output.save(out_filename)
-            else:
-                cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-                cv2.imshow(WINDOW_NAME, visualized_output.get_image()[:, :, ::-1])
-                if cv2.waitKey(0) == 27:
-                    break  # esc to quit
-
-        with open(args.pkl_pth, "wb") as f:
-            pickle.dump(output_lst_dict, f)
-
-    elif args.webcam:
-        assert args.input is None, "Cannot have both --input and --webcam!"
-        assert args.output is None, "output not yet supported with --webcam!"
-        cam = cv2.VideoCapture(0)
-        for vis in tqdm.tqdm(demo.run_on_video(cam)):
-            cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-            cv2.imshow(WINDOW_NAME, vis)
-            if cv2.waitKey(1) == 27:
-                break  # esc to quit
-        cam.release()
-        cv2.destroyAllWindows()
-    elif args.video_input:
-        video = cv2.VideoCapture(args.video_input)
-        width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        frames_per_second = video.get(cv2.CAP_PROP_FPS)
-        num_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-        basename = os.path.basename(args.video_input)
-
-        if args.output:
-            if os.path.isdir(args.output):
-                output_fname = os.path.join(args.output, basename)
-                output_fname = os.path.splitext(output_fname)[0] + ".mkv"
-            else:
-                output_fname = args.output
-            assert not os.path.isfile(output_fname), output_fname
-            output_file = cv2.VideoWriter(
-                filename=output_fname,
-                # some installation of opencv may not support x264 (due to its license),
-                # you can try other format (e.g. MPEG)
-                fourcc=cv2.VideoWriter_fourcc(*"x264"),
-                fps=float(frames_per_second),
-                frameSize=(width, height),
-                isColor=True,
-            )
-        assert os.path.isfile(args.video_input)
-        for vis_frame in tqdm.tqdm(demo.run_on_video(video), total=num_frames):
-            if args.output:
-                output_file.write(vis_frame)
-            else:
-                cv2.namedWindow(basename, cv2.WINDOW_NORMAL)
-                cv2.imshow(basename, vis_frame)
-                if cv2.waitKey(1) == 27:
-                    break  # esc to quit
-        video.release()
-        if args.output:
-            output_file.release()
+        pred_objs_cord = predictions["instances"].pred_boxes.tensor.cpu().numpy()
+        pred_objs_cls_name = np.array(
+            [
+                demo.metadata.thing_classes[cls_id]
+                for cls_id in predictions["instances"].pred_classes.cpu().numpy()
+            ]
+        )
+        pred_objs_cls_name = np.reshape(pred_objs_cls_name, (-1, 1))
+        pred_objs = np.hstack((pred_objs_cord, pred_objs_cls_name))
+        if len(pred_objs) > 0:  # handle the case of empty predictions
+            # Remove repeated cord
+            pred_filtered = {0: [pred_objs[0]]}
+            for idx in range(pred_objs.shape[0]):
+                found = False
+                for k, v in pred_filtered.items():
+                    if (
+                        pred_objs[idx][0:4].astype(float).astype(int)
+                        == v[0][0:4].astype(float).astype(int)
+                    ).all():
+                        found = True
+                        pred_filtered[k].append(pred_objs[idx])
+                        break
+                if not found:
+                    pred_filtered[idx] = [pred_objs[idx]]
         else:
-            cv2.destroyAllWindows()
+            pred_filtered = {0: [[0, 0, 0, 0, ""]]}
+
+        img_name = path.split("/")[-1].split(".")[0]
+
+        # iter_idx = int(img_name.split("_")[1])
+        iter_idx = 0
+        # print(int(img_name.split("_")[0]))
+
+        if iter_idx not in output_lst_dict.keys():
+            output_lst_dict[iter_idx] = {}
+        output_lst_dict[iter_idx][int(img_name.split("_")[0])] = pred_filtered
+        # with open(args.pkl_pth, 'wb') as f:
+        #     pickle.dump(output_lst_dict, f)
+        # assert False
+        logger.info(
+            "{}: {} in {:.2f}s".format(
+                path,
+                "detected {} instances".format(len(predictions["instances"]))
+                if "instances" in predictions
+                else "finished",
+                time.time() - start_time,
+            )
+        )
+        out_dir = os.path.join(args.output_base_dir, f"{args.task}_detected_images")
+        os.makedirs(out_dir, exist_ok=True)
+        if os.path.isdir(out_dir):
+            assert os.path.isdir(out_dir), out_dir
+            out_filename = os.path.join(out_dir, os.path.basename(path))
+        else:
+            assert len(args.input) == 1, (
+                "Please specify a directory with args.output_base_dir"
+            )
+            out_filename = out_dir
+        visualized_output.save(out_filename)
+
+
+    with open(args.pkl_pth, "wb") as f:
+        pickle.dump(output_lst_dict, f)
+
