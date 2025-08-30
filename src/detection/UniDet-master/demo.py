@@ -106,7 +106,7 @@ if __name__ == "__main__":
     for path in tqdm.tqdm(args.input, disable=not args.output_base_dir):
         if ("png" not in path) and ("jpg" not in path):
             continue
-        if ("layout.jpg" in path) or ("layout.png" in path):
+        if ("layout" in path):
             continue
         # img_name = path.split("/")[-1].split(".")[0]
         # if int(img_name.split("_")[0]) > 200 or int(img_name.split("_")[0]) < 100: continue
