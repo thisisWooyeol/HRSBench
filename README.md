@@ -29,11 +29,6 @@ The dataset includes four main categories: spatial relationship, color, size, an
 
 And there are also mysteriously missing prompts in `*.p` pickle files, last lines for all datasets. Therefore, 2,990/896/423/483 unique prompts can be evaluated.
 
-# FIXME
-
-- [ ] tags handling of HRS dataset for tag based Attention Modulation
-- [ ] replace underbar to space in HRS dataset-phrases
-
 
 # How to evaluate
 
