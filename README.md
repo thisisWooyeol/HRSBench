@@ -38,6 +38,12 @@ uv sync
 source .venv/bin/activate
 ```
 
+Download UniDet weight from Google Drive [URL](https://drive.google.com/file/d/110JSpmfNU__7T3IMSJwv0QSfLLo_AqtZ/edit) and download MaskDino weight with following code:
+```bash
+wget https://github.com/IDEA-Research/detrex-storage/releases/download/maskdino-v0.1.0/maskdino_swinl_50ep_300q_hid2048_3sd1_instance_maskenhanced_mask52.3ap_box59.0ap.pth
+```
+
+
 ## Step-1: Generate Images with HRS prompts (and optionally with box layouts)
 
 The HRS Bench dataset is structured to support benchmarking for both text-to-image (T2I) and layout-to-image (L2I) tasks. The dataset includes **prompts** and corresponding **box layouts** for each image. Users can choose to generate images using either the prompts alone or the prompts in conjunction with the box layouts.
