@@ -1,5 +1,33 @@
 #!/bin/bash
 
+# Help function
+show_help() {
+    echo "Usage: $0 METHOD IMAGE_BASE_DIR [GENERATION_SEED]"
+    echo ""
+    echo "Run the HRS benchmark for a given method and image directory."
+    echo ""
+    echo "Arguments:"
+    echo "  METHOD           The name of the method being benchmarked (e.g., SD1.5, GLIGEN)."
+    echo "  IMAGE_BASE_DIR   The base directory containing the generated images, organized by task (e.g., /path/to/images)."
+    echo "  GENERATION_SEED  (Optional) The seed used for image generation. Defaults to 42."
+    echo ""
+    echo "Options:"
+    echo "  --help, -h       Show this help message and exit."
+}
+
+# Check for help flag
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    show_help
+    exit 0
+fi
+
+# Check for required arguments
+if [ -z "$1" ] || [ -z "$2" ]; then
+    echo "Error: METHOD and IMAGE_BASE_DIR are required arguments."
+    show_help
+    exit 1
+fi
+
 METHOD=$1
 IMAGE_BASE_DIR=$2
 GENERATION_SEED=${3:-42}
