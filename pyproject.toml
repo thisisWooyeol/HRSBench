@@ -29,7 +29,6 @@ torchvision = { index = "pytorch" }
 [[tool.uv.index]]
 name = "pytorch"
 url = "https://download.pytorch.org/whl/cu124"
-explicit = true  # Restricts usage to explicitly pinned packages
 
 [tool.uv.extra-build-dependencies]
 detectron2 = ["setuptools", "torch"]
