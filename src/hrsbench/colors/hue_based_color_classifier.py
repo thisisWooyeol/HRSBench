@@ -7,6 +7,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from hrsbench import HRSBENCH_ROOT
 
 
 def detect_color_hue_based(hue_value):
@@ -248,7 +249,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--gt_jsonl_path", 
         type=str, 
-        default="./hrs_dataset/color.jsonl",
+        default=f"{HRSBENCH_ROOT}/hrs_dataset/color.jsonl",
         help="Path to ground truth JSONL file"
     )
     args = parser.parse_args()

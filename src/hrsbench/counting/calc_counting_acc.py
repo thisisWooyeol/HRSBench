@@ -4,6 +4,7 @@ import pickle
 import warnings
 from typing import Any
 
+from hrsbench import HRSBENCH_ROOT
 
 def load_gt(jsonl_path: str) -> list[dict[str, Any]]:
     """
@@ -115,7 +116,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--gt_jsonl_path", 
         type=str, 
-        default="./hrs_dataset/counting.jsonl",
+        default=f"{HRSBENCH_ROOT}/hrs_dataset/counting.jsonl",
         help="Path to the ground truth JSONL file.",
     )
     args = parser.parse_args()

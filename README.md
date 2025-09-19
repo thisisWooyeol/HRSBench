@@ -38,8 +38,9 @@ uv sync
 source .venv/bin/activate
 ```
 
-Download UniDet weight from Google Drive [URL](https://drive.google.com/file/d/110JSpmfNU__7T3IMSJwv0QSfLLo_AqtZ/edit) and download MaskDino weight with following code:
+Download UniDet weight and MaskDino weight with following code:
 ```bash
+gdown 110JSpmfNU__7T3IMSJwv0QSfLLo_AqtZ
 wget https://github.com/IDEA-Research/detrex-storage/releases/download/maskdino-v0.1.0/maskdino_swinl_50ep_300q_hid2048_3sd1_instance_maskenhanced_mask52.3ap_box59.0ap.pth
 ```
 
