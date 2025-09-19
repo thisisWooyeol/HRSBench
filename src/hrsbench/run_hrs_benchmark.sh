@@ -9,6 +9,7 @@ show_help() {
     echo "Arguments:"
     echo "  METHOD           The name of the method being benchmarked (e.g., SD1.5, GLIGEN)."
     echo "  IMAGE_BASE_DIR   The base directory containing the generated images, organized by task (e.g., /path/to/images)."
+    echo "  OUTPUT_ROOT_DIR  (Optional) The root directory to save outputs. Defaults to ./output."
     echo "  GENERATION_SEED  (Optional) The seed used for image generation. Defaults to 42."
     echo ""
     echo "Options:"
@@ -30,7 +31,8 @@ fi
 
 METHOD=$1
 IMAGE_BASE_DIR=$2
-GENERATION_SEED=${3:-42}
+OUTPUT_ROOT_DIR=${3:-"./output"}
+GENERATION_SEED=${4:-42}
 
 echo "Running HRS benchmark with method: $METHOD, seed: $GENERATION_SEED"
 
@@ -80,7 +82,7 @@ fi
 
 
 # Create output directory for the method
-OUTPUT_DIR="./output/${METHOD}_seed${GENERATION_SEED}"
+OUTPUT_DIR="./${OUTPUT_ROOT_DIR}/${METHOD}_seed${GENERATION_SEED}"
 mkdir -p "$OUTPUT_DIR"
 
 # Run benchmarking for each task
