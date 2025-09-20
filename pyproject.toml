@@ -42,6 +42,7 @@ where = ["src"]
 hrsbench = [
     "detection/UniDet-master/configs/*",
     "detection/UniDet-master/datasets/label_spaces/*",
+    "colors/MaskDINO/configs/**",
     "colors/MaskDINO/maskdino/modeling/pixel_decoder/ops/**",
     # wylee added
     "hrs_dataset/*", 
