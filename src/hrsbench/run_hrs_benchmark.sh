@@ -52,7 +52,7 @@ METHOD_NAME=${2:-$(basename "$IMAGE_ROOT_DIR")}
 OUTPUT_ROOT_DIR=${3:-"./output"}
 GENERATION_SEED=${4:-42}
 
-SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+HRSBENCH_ROOT_DIR=$(cd "$(dirname "$0")" && pwd)
 
 
 echo "Running HRS benchmark with method: $METHOD_NAME, seed: $GENERATION_SEED"
@@ -85,17 +85,17 @@ fi
 
 
 # Download pretrained weights if not already present
-mkdir -p "$SCRIPT_DIR/pretrained_weights"
+mkdir -p "$HRSBENCH_ROOT_DIR/pretrained_weights"
 
-if [ ! -f "$SCRIPT_DIR/pretrained_weights/maskdino_swinl_50ep_300q_hid2048_3sd1_instance_maskenhanced_mask52.3ap_box59.0ap.pth" ]; then
+if [ ! -f "$HRSBENCH_ROOT_DIR/pretrained_weights/maskdino_swinl_50ep_300q_hid2048_3sd1_instance_maskenhanced_mask52.3ap_box59.0ap.pth" ]; then
     echo "MaskDINO weights not found. Downloading..."
-    cd "$SCRIPT_DIR/pretrained_weights"
+    cd "$HRSBENCH_ROOT_DIR/pretrained_weights"
     wget https://github.com/IDEA-Research/detrex-storage/releases/download/maskdino-v0.1.0/maskdino_swinl_50ep_300q_hid2048_3sd1_instance_maskenhanced_mask52.3ap_box59.0ap.pth
     cd -
 fi
-if [ ! -f "$SCRIPT_DIR/pretrained_weights/Partitioned_COI_RS101_2x.pth" ]; then
+if [ ! -f "$HRSBENCH_ROOT_DIR/pretrained_weights/Partitioned_COI_RS101_2x.pth" ]; then
     echo "UniDet weights not found. Downloading..."
-    cd "$SCRIPT_DIR/pretrained_weights"
+    cd "$HRSBENCH_ROOT_DIR/pretrained_weights"
     gdown 110JSpmfNU__7T3IMSJwv0QSfLLo_AqtZ
     cd -
 fi
@@ -120,12 +120,12 @@ for TASK_DIR in "${FOUND_TASK_DIRS[@]}"; do
             
             # Run UniDet detection
             PKL_PATH="${OUTPUT_DIR}/${TASK_TYPE}.pkl"
-            python "${SCRIPT_DIR}/detection/UniDet-master/demo.py" \
+            python "${HRSBENCH_ROOT_DIR}/detection/UniDet-master/demo.py" \
                 --input "${TASK_DIR}/*" \
                 --output_base_dir "$OUTPUT_DIR" \
                 --task "$TASK_TYPE" \
                 --pkl_pth "$PKL_PATH" \
-                --opts MODEL.WEIGHTS "Partitioned_COI_RS101_2x.pth"
+                --opts MODEL.WEIGHTS "$HRSBENCH_ROOT_DIR/pretrained_weights/Partitioned_COI_RS101_2x.pth"
             
             if [ $? -eq 0 ]; then
                 echo "UniDet detection completed successfully for $TASK_TYPE"
@@ -134,15 +134,15 @@ for TASK_DIR in "${FOUND_TASK_DIRS[@]}"; do
                 case $TASK_TYPE in
                     "counting")
                         echo "Calculating counting accuracy..."
-                        python "${SCRIPT_DIR}/counting/calc_counting_acc.py" --in_pkl_path "$PKL_PATH"
+                        python "${HRSBENCH_ROOT_DIR}/counting/calc_counting_acc.py" --in_pkl_path "$PKL_PATH"
                         ;;
                     "spatial")
                         echo "Calculating spatial composition accuracy..."
-                        python "${SCRIPT_DIR}/compositions/calc_spatial_relation_acc.py" --in_pkl_path "$PKL_PATH"
+                        python "${HRSBENCH_ROOT_DIR}/compositions/calc_spatial_relation_acc.py" --in_pkl_path "$PKL_PATH"
                         ;;
                     "size")
                         echo "Calculating size composition accuracy..."
-                        python "${SCRIPT_DIR}/compositions/calc_size_comp_acc.py" --in_pkl_path "$PKL_PATH"
+                        python "${HRSBENCH_ROOT_DIR}/compositions/calc_size_comp_acc.py" --in_pkl_path "$PKL_PATH"
                         ;;
                 esac
             else
@@ -154,17 +154,17 @@ for TASK_DIR in "${FOUND_TASK_DIRS[@]}"; do
             echo "Running MaskDINO segmentation for color task..."
             
             # Run MaskDINO segmentation
-            python "${SCRIPT_DIR}/colors/MaskDINO/demo/demo.py" \
+            python "${HRSBENCH_ROOT_DIR}/colors/MaskDINO/demo/demo.py" \
                 --input "${TASK_DIR}/*" \
                 --output_base_dir "$OUTPUT_DIR" \
-                --opts MODEL.WEIGHTS "maskdino_swinl_50ep_300q_hid2048_3sd1_instance_maskenhanced_mask52.3ap_box59.0ap.pth"
+                --opts MODEL.WEIGHTS "$HRSBENCH_ROOT_DIR/pretrained_weights/maskdino_swinl_50ep_300q_hid2048_3sd1_instance_maskenhanced_mask52.3ap_box59.0ap.pth"
             
             if [ $? -eq 0 ]; then
                 echo "MaskDINO segmentation completed successfully for color task"
                 
                 # Run color classification
                 echo "Running color classification..."
-                python "${SCRIPT_DIR}/colors/hue_based_color_classifier.py" \
+                python "${HRSBENCH_ROOT_DIR}/colors/hue_based_color_classifier.py" \
                     --input_image_dir "$TASK_DIR" \
                     --input_mask_dir "${OUTPUT_DIR}/color_detected_images"
             else
