@@ -38,7 +38,13 @@ detectron2 = ["setuptools", "torch"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-hrsbench = ["hrs_dataset/*", "run_hrs_benchmark.sh"]
+hrsbench = [
+    "detection/UniDet-master/configs/*",
+    "detection/UniDet-master/datasets/label_spaces/*",
+    # wylee added
+    "hrs_dataset/*", 
+    "run_hrs_benchmark.sh"
+]
 
 
 [build-system]
